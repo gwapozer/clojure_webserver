@@ -1,0 +1,92 @@
+/****** Object:  UserDefinedFunction [dbo].[GetSensorStdDevTempBySensorId]    Script Date: 12/26/2019 5:37:57 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE FUNCTION [dbo].[GetSensorStdDevTempBySensorId]
+(@SensorId int,
+@ReadingStartDate DateTime,
+@ReadingEndDate DateTime)
+RETURNS float
+as
+begin
+	declare @tmp float
+	set @tmp = 0.0
+
+ select @tmp = STDEV(Field1Float)
+
+    from
+        Data
+		WHERE (@SensorId IS NULL OR SenId = @SensorId)
+	AND (@ReadingStartDate IS NULL OR DATEDIFF(d, @ReadingStartDate, ReadingAt) >= 0)
+	AND (@ReadingEndDate IS NULL OR DATEDIFF(d, @ReadingEndDate, ReadingAt) <= 0)
+
+	return @tmp
+end
+
+
+
+
+
+/****** Object:  UserDefinedFunction [dbo].[GetSensorMedianTempBySensorId]    Script Date: 12/27/2019 12:57:49 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE FUNCTION [dbo].[GetSensorMedianTempBySensorId]
+(@SensorId int,
+@ReadingStartDate DateTime,
+@ReadingEndDate DateTime)
+RETURNS float
+as
+begin
+	declare @tmp float
+	set @tmp = 0.0
+
+select @tmp = AVG(Field1Float)
+from
+(
+    select SenId, Field1Float,
+        ROW_NUMBER() over (partition by SenId order by Field1Float ASC) as Field1FloatRank,
+        COUNT(*) over (partition by SenId) as idCount
+    from
+        Data
+		WHERE (@SensorId IS NULL OR SenId = @SensorId)
+	AND (@ReadingStartDate IS NULL OR DATEDIFF(d, @ReadingStartDate, ReadingAt) >= 0)
+	AND (@ReadingEndDate IS NULL OR DATEDIFF(d, @ReadingEndDate, ReadingAt) <= 0)
+) x
+where
+    x.Field1FloatRank in (x.idCount/2+1, (x.idCount+1)/2)
+
+	return @tmp
+end
+
+
+
+
+
+
+/****** Object:  UserDefinedFunction [dbo].[GetSensorLastTempBySensorId]    Script Date: 12/26/2019 5:39:22 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE FUNCTION [dbo].[GetSensorLastTempBySensorId]
+(@SensorId int,
+@ReadingStartDate DateTime,
+@ReadingEndDate DateTime)
+RETURNS float
+as
+begin
+	declare @tmp float
+	set @tmp = 0.0
+	select @tmp = D.Field1Float from Data D
+	WHERE D.ID IN (select  max(D.id) from Data D WHERE
+	(@SensorId IS NULL OR D.SenId = @SensorId)
+	AND (@ReadingStartDate IS NULL OR DATEDIFF(d, @ReadingStartDate, D.ReadingAt) >= 0)
+	AND (@ReadingEndDate IS NULL OR DATEDIFF(d, @ReadingEndDate, D.ReadingAt) <= 0))
+	return @tmp
+end

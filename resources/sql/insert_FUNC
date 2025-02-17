@@ -1,0 +1,120 @@
+
+/****** Object:  UserDefinedFunction [dbo].[GetSensorEventTimeLap]    Script Date: 10/10/2019 3:08:27 PM ******/
+DROP FUNCTION [dbo].[GetSensorEventTimeLap]
+GO
+/****** Object:  UserDefinedFunction [dbo].[GetSensorEventNextGoodTemp]    Script Date: 10/10/2019 3:08:27 PM ******/
+DROP FUNCTION [dbo].[GetSensorEventNextGoodTemp]
+GO
+/****** Object:  UserDefinedFunction [dbo].[GetSensorEventEvalID]    Script Date: 10/10/2019 3:08:27 PM ******/
+DROP FUNCTION [dbo].[GetSensorEventEvalID]
+GO
+/****** Object:  UserDefinedFunction [dbo].[GetSensorEventBySensorId]    Script Date: 10/10/2019 3:08:27 PM ******/
+DROP FUNCTION [dbo].[GetSensorEventBySensorId]
+GO
+/****** Object:  UserDefinedFunction [dbo].[GetSensorEventBySensorId]    Script Date: 10/10/2019 3:08:27 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE FUNCTION [dbo].[GetSensorEventBySensorId]
+(@SensorId int,
+@ReadingStartDate DateTime,
+@ReadingEndDate DateTime)
+RETURNS varchar(5000)
+as
+begin
+	declare @tmp varchar(5000)
+	set @tmp = ''
+	select @tmp = @tmp + ',' + LTRIM(RTRIM(D.EvtText)) from Data D
+	--select @tmp = @tmp + ',' + LTRIM(RTRIM(D.EvtText)) + case when D.Field1Float is not null then ' ('+ convert(varchar(500), D.Field1Float) + ')' else '' end from Data D
+	WHERE
+	(@SensorId IS NULL OR D.SenId = @SensorId)
+	AND (@ReadingStartDate IS NULL OR DATEDIFF(d, @ReadingStartDate, D.ReadingAt) >= 0)
+	AND (@ReadingEndDate IS NULL OR DATEDIFF(d, @ReadingEndDate, D.ReadingAt) <= 0)
+	AND D.EvtText IS NOT NULL
+	group by D.EvtText, D.Field1Float
+
+	select @tmp = RIGHT(@tmp, case when  LEN(@tmp) > 1 then LEN(@tmp) - 1 else LEN(@Tmp) end)
+	return @tmp
+end
+
+GO
+/****** Object:  UserDefinedFunction [dbo].[GetSensorEventEvalID]    Script Date: 10/10/2019 3:08:27 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE FUNCTION [dbo].[GetSensorEventEvalID]
+(@SensorId int,
+@DataId int,
+@FreezerIds varchar(500),
+@FridgeIds varchar(500))
+RETURNS int
+as
+begin
+	declare @tmp int
+	set @tmp = -1
+
+	select
+	top 1 @tmp = D.id
+	from Data D
+	where
+	(
+	((@FreezerIds IS NULL OR ',' + @FreezerIds + ',' like '%,' + convert(varchar(500), D.SenId) + ',%') and (D.Field1Float > -35.0 and D.Field1Float < -10.0))
+	OR
+	((@FridgeIds IS NULL OR ',' + @FridgeIds + ',' like '%,' + convert(varchar(500), D.SenId) + ',%') and (D.Field1Float > 0.0 and D.Field1Float < 8.0))
+	)
+	AND D.SenId = @SensorId
+	and D.id > @DataId
+	--order by D.id desc
+
+	return @tmp
+end
+
+GO
+/****** Object:  UserDefinedFunction [dbo].[GetSensorEventNextGoodTemp]    Script Date: 10/10/2019 3:08:27 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE FUNCTION [dbo].[GetSensorEventNextGoodTemp]
+(@DataId int)
+RETURNS float
+as
+begin
+	declare @tmp float
+	select  @tmp =D.Field1Float from Data D where D.id = @DataId
+	return @tmp
+end
+
+GO
+/****** Object:  UserDefinedFunction [dbo].[GetSensorEventTimeLap]    Script Date: 10/10/2019 3:08:27 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE FUNCTION [dbo].[GetSensorEventTimeLap]
+(@DataId int,
+@NextDataId int)
+RETURNS varchar(5000)
+as
+begin
+    declare @StartDt as datetime
+	declare @EndDt as datetime
+
+	declare @tmp varchar(5000)
+	set @tmp = ''
+
+	select @StartDt = D.ReadingAt from Data D where D.id = @DataId
+	select  @EndDt = D.ReadingAt from Data D where D.id = @NextDataId
+
+	select @tmp = datediff(minute, @StartDt, @EndDt)
+
+	return @tmp
+end
+
+GO

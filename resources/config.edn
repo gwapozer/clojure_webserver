@@ -1,0 +1,6 @@
+{:jar-name "mssql-jdbc-7.0.0.jre8.jar",
+ :db-spec {:dbtype "mssql"
+           :dbname "test"
+           :user "test_usr"
+           :password "test"}
+ }

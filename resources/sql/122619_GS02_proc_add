@@ -1,0 +1,169 @@
+/****** Object:  StoredProcedure [dbo].[SearchSensor]    Script Date: 12/27/2019 11:56:30 AM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+ALTER PROCEDURE [dbo].[SearchSensor]
+	@SensorId int,
+	@ReadingStartDate DateTime,
+	@ReadingEndDate DateTime,
+	@PageIndex int,
+	@PageSize int,
+	@SortField int,
+	@ForExport int
+AS
+	SET NOCOUNT ON;
+
+	DECLARE @TotalRows INT
+	DECLARE @PageLowerBound INT
+	DECLARE @PageUpperBound INT
+
+	IF @PageSize IS NOT NULL
+	BEGIN
+		SET @PageLowerBound = @PageSize * @PageIndex
+		SET @PageUpperBound = @PageLowerBound + @PageSize + 1
+	END
+
+	CREATE TABLE #PageIndex
+	(
+		[IndexID] int IDENTITY (1,1) NOT NULL,
+		id int,
+		SenId int,
+		UserId varchar(10),
+		Field1Float float,
+		EvtText varchar(40),
+		ReadingAt datetime
+	)
+
+	CREATE TABLE #PageIndexSummary
+	(
+		[IndexID] int IDENTITY (1,1) NOT NULL,
+		SenId int,
+		UserID varchar(10),
+		MinTemp float,
+		MaxTemp float,
+		AverageTemp float,
+		LastTemp float,
+		Median float,
+		StdDev float,
+		EventText varchar(5000)
+	)
+
+	INSERT INTO #PageIndex
+	(
+		id,
+		SenId,
+		UserId,
+		Field1Float,
+		EvtText,
+		ReadingAt
+	)
+
+	SELECT
+	D.id,
+	D.SenId,
+	S.UserId,
+	D.Field1Float,
+	D.EvtText,
+	D.ReadingAt
+	FROM Data D
+	LEFT OUTER JOIN Sensor S on S.id = D.SenId
+	WHERE
+	(@SensorId IS NULL OR @SensorId = -1 OR D.SenId = @SensorId)
+	AND (@ReadingStartDate IS NULL OR DATEDIFF(d, @ReadingStartDate, D.ReadingAt) >= 0)
+	AND (@ReadingEndDate IS NULL OR DATEDIFF(d, @ReadingEndDate, D.ReadingAt) <= 0)
+
+	--ORDER BY
+	--LEFT(S.UserId,PATINDEX('%[0-9]%',S.UserId)-1),CONVERT(INT,SUBSTRING(S.UserId,PATINDEX('%[0-9]%',S.UserId),LEN(S.UserId)))
+	--CASE WHEN @SortField = -1 THEN S.UserId END ASC,
+	--CASE WHEN @SortField = 1 THEN S.UserId END DESC
+
+	IF @ForExport = 0 OR @ForExport = 1
+	BEGIN
+	INSERT INTO #PageIndexSummary
+	(
+		SenId,
+		UserID,
+		MinTemp,
+		MaxTemp,
+		AverageTemp,
+		LastTemp,
+		Median,
+		StdDev,
+		EventText
+	)
+
+	SELECT
+	P.SenId,
+	P.UserId,
+	MIN(P.Field1Float),
+	MAX(P.Field1Float),
+	AVG(P.Field1Float),
+	[dbo].[GetSensorLastTempBySensorId](P.SenId, @ReadingStartDate, @ReadingEndDate),
+	[dbo].[GetSensorMedianTempBySensorId](P.SenId, @ReadingStartDate, @ReadingEndDate),
+	[dbo].[GetSensorStdDevTempBySensorId](P.SenId, @ReadingStartDate, @ReadingEndDate),
+	[dbo].[GetSensorEventBySensorId](P.SenId, @ReadingStartDate, @ReadingEndDate)
+	FROM #PageIndex P
+	GROUP BY
+	P.UserId, P.SenId
+
+	SELECT @TotalRows = COUNT([IndexID]) FROM #PageIndexSummary
+	END
+
+	IF @ForExport = 0
+	BEGIN
+		SELECT
+		SI.WifiMonitorName as UserID,
+		P.MinTemp,
+		P.MaxTemp,
+		P.AverageTemp,
+		P.LastTemp,
+		P.Median,
+		P.StdDev,
+		P.EventText,
+		@TotalRows as TotalRows
+		FROM #PageIndexSummary P
+		LEFT JOIN _ENT_SensorInfo SI on SI.SensorID = P.SenId
+		WHERE
+		(@PageSize IS NULL OR P.IndexID > @PageLowerBound)
+		AND (@PageSize IS NULL OR P.IndexID < @PageUpperBound)
+		ORDER BY
+		LEFT(P.UserId,PATINDEX('%[0-9]%',P.UserId)-1),CONVERT(INT,SUBSTRING(P.UserId,PATINDEX('%[0-9]%',P.UserId),LEN(P.UserId)))
+	END
+	ELSE IF @ForExport = 1
+	BEGIN
+		SELECT
+		SI.WifiMonitorName as UserID,
+		P.MinTemp,
+		P.MaxTemp,
+		P.AverageTemp,
+		P.LastTemp,
+		P.Median,
+		P.StdDev,
+		P.EventText
+		FROM #PageIndexSummary P
+		LEFT JOIN _ENT_SensorInfo SI on SI.SensorID = P.SenId
+		ORDER BY
+		LEFT(P.UserId,PATINDEX('%[0-9]%',P.UserId)-1),CONVERT(INT,SUBSTRING(P.UserId,PATINDEX('%[0-9]%',P.UserId),LEN(P.UserId)))
+	END
+	 ELSE IF @ForExport = 2
+	BEGIN
+		SELECT
+		SI.WifiMonitorName as UserID,
+		D.Field1Float as Temp,
+		D.EvtText as EventTExt,
+		D.ReadingAt as ReadingOn
+
+		FROM #PageIndex P
+		LEFT JOIN _ENT_SensorInfo SI on SI.SensorID = P.SenId
+		LEFT OUTER JOIN Data D on D.id = P.id
+		LEFT OUTER JOIN Sensor S on S.id = D.SenId
+
+	END
+
+	DROP TABLE #PageIndex
+	DROP TABLE #PageIndexSummary
+
+
+SET ANSI_NULLS ON

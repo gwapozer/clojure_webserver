@@ -1,0 +1,56 @@
+SET IDENTITY_INSERT [dbo].[_ENT_AppEvent] ON
+
+GO
+INSERT [dbo].[_ENT_AppEvent] ([ID], [Name]) VALUES (1, N'ADD')
+GO
+INSERT [dbo].[_ENT_AppEvent] ([ID], [Name]) VALUES (2, N'UPDATE')
+GO
+INSERT [dbo].[_ENT_AppEvent] ([ID], [Name]) VALUES (3, N'DELETE')
+GO
+SET IDENTITY_INSERT [dbo].[_ENT_AppEvent] OFF
+GO
+
+
+
+
+
+
+
+
+
+SET IDENTITY_INSERT [dbo].[_ENT_SensorInfo] ON
+
+GO
+INSERT [dbo].[_ENT_SensorInfo] ([ID], [SensorID], [WifiMonitorName]) VALUES (1, 1, N'Name 1')
+GO
+INSERT [dbo].[_ENT_SensorInfo] ([ID], [SensorID], [WifiMonitorName]) VALUES (2, 2, N'Name 2')
+GO
+INSERT [dbo].[_ENT_SensorInfo] ([ID], [SensorID], [WifiMonitorName]) VALUES (3, 3, N'Name 3')
+GO
+INSERT [dbo].[_ENT_SensorInfo] ([ID], [SensorID], [WifiMonitorName]) VALUES (4, 4, N'Name 4')
+GO
+INSERT [dbo].[_ENT_SensorInfo] ([ID], [SensorID], [WifiMonitorName]) VALUES (5, 5, N'Name 5')
+GO
+INSERT [dbo].[_ENT_SensorInfo] ([ID], [SensorID], [WifiMonitorName]) VALUES (6, 6, N'Name 6')
+GO
+INSERT [dbo].[_ENT_SensorInfo] ([ID], [SensorID], [WifiMonitorName]) VALUES (7, 7, N'Name 7')
+GO
+INSERT [dbo].[_ENT_SensorInfo] ([ID], [SensorID], [WifiMonitorName]) VALUES (8, 8, N'Name 8')
+GO
+INSERT [dbo].[_ENT_SensorInfo] ([ID], [SensorID], [WifiMonitorName]) VALUES (9, 9, N'Name 9')
+GO
+INSERT [dbo].[_ENT_SensorInfo] ([ID], [SensorID], [WifiMonitorName]) VALUES (10, 10, N'Name 10')
+GO
+INSERT [dbo].[_ENT_SensorInfo] ([ID], [SensorID], [WifiMonitorName]) VALUES (11, 11, N'Name 11')
+GO
+INSERT [dbo].[_ENT_SensorInfo] ([ID], [SensorID], [WifiMonitorName]) VALUES (12, 12, N'Name 12')
+GO
+INSERT [dbo].[_ENT_SensorInfo] ([ID], [SensorID], [WifiMonitorName]) VALUES (13, 13, N'Name 13')
+GO
+INSERT [dbo].[_ENT_SensorInfo] ([ID], [SensorID], [WifiMonitorName]) VALUES (14, 14, N'Name 14')
+GO
+INSERT [dbo].[_ENT_SensorInfo] ([ID], [SensorID], [WifiMonitorName]) VALUES (15, 15, N'Name 15')
+GO
+SET IDENTITY_INSERT [dbo].[_ENT_SensorInfo] OFF
+GO
+

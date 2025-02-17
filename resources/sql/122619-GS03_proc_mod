@@ -1,0 +1,716 @@
+USE [PsDb]
+GO
+/****** Object:  StoredProcedure [dbo].[SearchSensorData]    Script Date: 12/27/2019 1:54:28 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+ALTER PROCEDURE [dbo].[SearchSensorData]
+	@SensorId int,
+	@StatusId int,
+	@ReadingStartDate DateTime,
+	@ReadingEndDate DateTime,
+	@PageIndex int,
+	@PageSize int,
+	@SortField int,
+	@ForExport int
+AS
+	SET NOCOUNT ON;
+
+	DECLARE @TotalRows INT
+	DECLARE @PageLowerBound INT
+	DECLARE @PageUpperBound INT
+
+	IF @PageSize IS NOT NULL
+	BEGIN
+		SET @PageLowerBound = @PageSize * @PageIndex
+		SET @PageUpperBound = @PageLowerBound + @PageSize + 1
+	END
+
+	CREATE TABLE #PageIndex
+	(
+		[IndexID] int IDENTITY (1,1) NOT NULL,
+		id int,
+		DataID int,
+		SenId int,
+		UserId varchar(10),
+		ReadinAt datetime,
+		CreatedOn datetime
+	)
+
+	CREATE TABLE #PageIndexSummary
+	(
+		[IndexID] int IDENTITY (1,1) NOT NULL,
+		DataIds varchar(5000),
+		SenId int,
+		UserID varchar(10),
+		StartedOn datetime,
+		EndedOn datetime,
+		MinTemp float,
+		MaxTemp float,
+		AverageTemp float,
+		EvtEventTxt varchar(5000)
+
+	)
+
+	INSERT INTO #PageIndex
+	(
+		id,
+		DataID,
+		SenId,
+		UserId,
+		ReadinAt,
+		CreatedOn
+	)
+
+	SELECT
+	ESD.id,
+	ESD.DataID,
+	ESD.SensorId,
+	S.UserId,
+	D.ReadingAt,
+	ESD.CreatedOn
+	FROM _ENT_SensorData ESD
+	JOIN Data D on D.id = ESD.DataID
+	LEFT JOIN Sensor S on S.id = ESD.SensorID
+	WHERE
+	(@SensorId IS NULL OR @SensorId = -1 OR ESD.SensorID = @SensorId)
+	AND (@StatusId IS NULL OR @StatusId = -1 OR ESD.StatusID = @StatusId)
+	AND (@ReadingStartDate IS NULL OR DATEDIFF(d, @ReadingStartDate, D.ReadingAt) >= 0)
+	AND (@ReadingEndDate IS NULL OR DATEDIFF(d, @ReadingEndDate, D.ReadingAt) <= 0)
+
+	SELECT @TotalRows = COUNT([IndexID]) FROM #PageIndex
+
+	IF @ForExport = 2
+	BEGIN
+
+	INSERT INTO #PageIndexSummary
+	(
+		DataIds,
+		SenId,
+		UserID,
+		StartedOn,
+		EndedOn,
+		MinTemp,
+		MaxTemp,
+		AverageTemp,
+		EvtEventTxt
+	)
+
+	SELECT
+	'',
+	P.SenId,
+	P.UserId,
+	MIN(D.ReadingAt),
+	MAX(D.ReadingAt),
+	MIN(D.Field1Float),
+	MAX(D.Field1Float),
+	AVG(D.Field1Float),
+	''
+	FROM #PageIndex P
+	JOIN Data D on D.id = P.DataID
+	GROUP BY
+	P.UserId, P.SenId
+
+	--Build the summary for temp lapping
+	declare @tmpSensorId int
+	declare @tmpStr varchar(5000)
+	declare @tmp varchar(5000)
+
+	declare @MaxId int
+	declare @Counter int
+	select @MaxId = max(IndexID) from #PageIndexSummary
+	select @Counter = min(IndexID) from #PageIndexSummary
+
+	while @Counter <= @MaxId
+	begin
+		set @tmpStr = ''
+		select @tmpSensorId = SenId from #PageIndexSummary where IndexID = @Counter
+
+		set @tmp = ''
+		select @tmp = @tmp + ',' + LTRIM(RTRIM(DataID)) from #PageIndex where SenId = @tmpSensorId
+		select @tmp = RIGHT(@tmp, case when  LEN(@tmp) > 1 then LEN(@tmp) - 1 else LEN(@Tmp) end)
+
+		exec [dbo].[GetSensorEventTempLapBySensorId] @tmpSensorId,@ReadingStartDate,@ReadingEndDate,@tmpStr output
+
+		update #PageIndexSummary set DataIds = @tmp, EvtEventTxt = @tmpStr where IndexID = @Counter
+
+		set @Counter = @Counter + 1
+	end
+	--END
+
+	SELECT @TotalRows = COUNT([IndexID]) FROM #PageIndexSummary
+	END
+
+	IF @ForExport = 0
+	BEGIN
+		SELECT
+		P.DataID,
+		P.id,
+		SI.WifiMonitorName as UserID,
+		D.EvtText,
+		D.Field1Float,
+		[dbo].[GetSensorEventNextGoodTemp]([dbo].[GetSensorEventEvalID](P.SenId, P.DataID, '1,2,3,4,5,6,7,9,10,11,13,14','8,12,15')) as NextGoodTemp,
+		[dbo].[GetSensorEventTimeLap](P.DataID, [dbo].[GetSensorEventEvalID](P.SenId, P.DataID, '1,2,3,4,5,6,7,9,10,11,13,14','8,12,15')) as TimeLap,
+		ES.Name StatusName,
+		P.CreatedOn,
+		@TotalRows as TotalRows
+		FROM #PageIndex P
+		JOIN _ENT_SensorData ESD on ESD.ID = P.id
+		LEFT JOIN Data D on D.id = P.DataID
+		LEFT JOIN _Ent_Status ES on ES.ID = ESD.StatusID
+		LEFT JOIN _ENT_SensorInfo SI on SI.SensorID = P.SenId
+		WHERE
+		(@PageSize IS NULL OR P.IndexID > @PageLowerBound)
+		AND (@PageSize IS NULL OR P.IndexID < @PageUpperBound)
+		ORDER BY
+		LEFT(SI.WifiMonitorName,PATINDEX('%[0-9]%',SI.WifiMonitorName)-1),CONVERT(INT,SUBSTRING(SI.WifiMonitorName,PATINDEX('%[0-9]%',SI.WifiMonitorName),LEN(SI.WifiMonitorName)))
+	END
+	ELSE IF @ForExport = 1
+	BEGIN
+		SELECT
+		P.id,
+		SI.WifiMonitorName as UserID,
+		D.EvtText,
+		D.Field1Float,
+		ES.Name StatusName,
+		P.CreatedOn
+		FROM #PageIndex P
+		JOIN _ENT_SensorData ESD on ESD.ID = P.id
+		LEFT JOIN Data D on D.id = P.DataID
+		LEFT JOIN _Ent_Status ES on ES.ID = ESD.StatusID
+		LEFT JOIN _ENT_SensorInfo SI on SI.SensorID = P.SenId
+		ORDER BY
+		LEFT(SI.WifiMonitorName,PATINDEX('%[0-9]%',SI.WifiMonitorName)-1),CONVERT(INT,SUBSTRING(SI.WifiMonitorName,PATINDEX('%[0-9]%',SI.WifiMonitorName),LEN(SI.WifiMonitorName)))
+	END
+	ELSE IF @ForExport = 2
+	BEGIN
+		SELECT
+		P.DataIds,
+		SI.WifiMonitorName as UserID,
+		P.StartedOn,
+		P.EndedOn,
+		P.MinTemp,
+		P.MaxTemp,
+		P.AverageTemp,
+		P.EvtEventTxt,
+		@TotalRows as TotalRows
+		FROM #PageIndexSummary P
+		LEFT JOIN _ENT_SensorInfo SI on SI.SensorID = P.SenId
+		ORDER BY
+		LEFT(SI.WifiMonitorName,PATINDEX('%[0-9]%',SI.WifiMonitorName)-1),CONVERT(INT,SUBSTRING(SI.WifiMonitorName,PATINDEX('%[0-9]%',SI.WifiMonitorName),LEN(SI.WifiMonitorName)))
+	END
+
+	DROP TABLE #PageIndex
+	DROP TABLE #PageIndexSummary
+
+SET ANSI_NULLS ON
+
+
+
+
+
+
+/****** Object:  StoredProcedure [dbo].[SearchSensorByTemp]    Script Date: 12/27/2019 1:39:12 PM ******/
+SET ANSI_NULLS ON
+
+
+
+
+
+
+
+USE [PsDb]
+GO
+/****** Object:  StoredProcedure [dbo].[SearchSensorByTemp]    Script Date: 12/27/2019 1:39:12 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+ALTER PROCEDURE [dbo].[SearchSensorByTemp]
+	@FreezerIds varchar(500),
+	@FridgeIds varchar(500),
+	@ReadingStartDate DateTime,
+	@ReadingEndDate DateTime,
+	@PageIndex int,
+	@PageSize int,
+	@SortField int,
+	@ForExport int
+AS
+	SET NOCOUNT ON;
+
+	DECLARE @TotalRows INT
+	DECLARE @PageLowerBound INT
+	DECLARE @PageUpperBound INT
+
+	IF @PageSize IS NOT NULL
+	BEGIN
+		SET @PageLowerBound = @PageSize * @PageIndex
+		SET @PageUpperBound = @PageLowerBound + @PageSize + 1
+	END
+
+	CREATE TABLE #PageIndex
+	(
+		[IndexID] int IDENTITY (1,1) NOT NULL,
+		id int,
+		SenId int,
+		UserId varchar(10),
+		Field1Float float,
+		EvtText varchar(40),
+		ReadingAt datetime
+	)
+
+	CREATE TABLE #PageIndexSummary
+	(
+		[IndexID] int IDENTITY (1,1) NOT NULL,
+		DataID int NOT NULL,
+		SensorID int NOT NULL,
+		UserID varchar(10),
+		Temp float,
+		EventText varchar(5000),
+		ReadingOn datetime
+	)
+
+	INSERT INTO #PageIndex
+	(
+		id,
+		SenId,
+		UserId,
+		Field1Float,
+		EvtText,
+		ReadingAt
+	)
+
+	SELECT
+	D.id,
+	D.SenId,
+	S.UserId,
+	D.Field1Float,
+	D.EvtText,
+	D.ReadingAt
+	FROM Data D
+	LEFT OUTER JOIN Sensor S on S.id = D.SenId
+	WHERE
+	(
+	((@FreezerIds IS NULL OR ',' + @FreezerIds + ',' like '%,' + convert(varchar(500), D.SenId) + ',%') and (D.Field1Float >= -10.0 or D.Field1Float <= -35.0))
+	OR
+	((@FridgeIds IS NULL OR ',' + @FridgeIds + ',' like '%,' + convert(varchar(500), D.SenId) + ',%') and (D.Field1Float >= 8.0 or D.Field1Float <= 0.0))
+	)
+	AND (@ReadingStartDate IS NULL OR DATEDIFF(d, @ReadingStartDate, D.ReadingAt) >= 0)
+	AND (@ReadingEndDate IS NULL OR DATEDIFF(d, @ReadingEndDate, D.ReadingAt) <= 0)
+	AND D.id NOT IN (select DataID from _ENT_SensorData)
+
+	INSERT INTO #PageIndexSummary
+	(
+		DataID,
+		SensorID,
+		UserID,
+		Temp,
+		EventText,
+		ReadingOn
+	)
+
+	SELECT
+	P.id,
+	P.SenId,
+	P.UserId,
+	P.Field1Float,
+	P.EvtText,--.[GetSensorEventBySensorId](P.SenId, @ReadingStartDate, @ReadingEndDate),
+	P.ReadingAt
+	FROM #PageIndex P
+	GROUP BY
+	P.UserId, P.SenId, P.Field1Float, P.ReadingAt,P.EvtText,P.id
+
+	SELECT @TotalRows = COUNT([IndexID]) FROM #PageIndexSummary
+
+	IF @ForExport = 0
+	BEGIN
+		SELECT
+		P.SensorID,
+		P.DataID,
+		P.UserID,
+		P.Temp,
+		P.EventText,
+		P.ReadingOn,
+		@TotalRows as TotalRows
+		FROM #PageIndexSummary P
+		LEFT JOIN _ENT_SensorInfo SI on SI.SensorID = P.SensorID
+		WHERE
+		(@PageSize IS NULL OR P.IndexID > @PageLowerBound)
+		AND (@PageSize IS NULL OR P.IndexID < @PageUpperBound)
+		ORDER BY
+		LEFT(SI.WifiMonitorName,PATINDEX('%[0-9]%',SI.WifiMonitorName)-1),CONVERT(INT,SUBSTRING(SI.WifiMonitorName,PATINDEX('%[0-9]%',SI.WifiMonitorName),LEN(SI.WifiMonitorName)))
+		,P.ReadingOn DESC
+	END
+	ELSE IF @ForExport = 1
+	BEGIN
+		SELECT
+		P.UserID,
+		P.Temp,
+		P.EventText,
+		P.ReadingOn
+		FROM #PageIndexSummary P
+		LEFT JOIN _ENT_SensorInfo SI on SI.SensorID = P.SensorID
+		ORDER BY
+		LEFT(SI.WifiMonitorName,PATINDEX('%[0-9]%',SI.WifiMonitorName)-1),CONVERT(INT,SUBSTRING(SI.WifiMonitorName,PATINDEX('%[0-9]%',SI.WifiMonitorName),LEN(SI.WifiMonitorName)))
+	END
+	 ELSE IF @ForExport = 2
+	BEGIN
+		SELECT
+		S.UserId as UserID,
+		D.Field1Float as Temp,
+		D.EvtText as EventTExt,
+		D.ReadingAt as ReadingOn
+
+		FROM #PageIndex P
+		LEFT OUTER JOIN Data D on D.id = P.id
+		LEFT OUTER JOIN Sensor S on S.id = D.SenId
+
+	END
+
+	DROP TABLE #PageIndex
+	DROP TABLE #PageIndexSummary
+
+
+
+
+
+
+USE [PsDb]
+GO
+/****** Object:  StoredProcedure [dbo].[SearchSensorByEventId]    Script Date: 12/27/2019 1:37:51 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+ALTER PROCEDURE [dbo].[SearchSensorByEventId]
+	@SensorId int,
+	@EvtIds varchar(500),
+	@ReadingStartDate DateTime,
+	@ReadingEndDate DateTime,
+	@PageIndex int,
+	@PageSize int,
+	@SortField int,
+	@ForExport int
+AS
+	SET NOCOUNT ON;
+
+	DECLARE @TotalRows INT
+	DECLARE @PageLowerBound INT
+	DECLARE @PageUpperBound INT
+
+	IF @PageSize IS NOT NULL
+	BEGIN
+		SET @PageLowerBound = @PageSize * @PageIndex
+		SET @PageUpperBound = @PageLowerBound + @PageSize + 1
+	END
+
+	CREATE TABLE #PageIndex
+	(
+		[IndexID] int IDENTITY (1,1) NOT NULL,
+		id int,
+		SenId int,
+		UserId varchar(10),
+		Field1Float float,
+		EvtText varchar(40),
+		ReadingAt datetime
+	)
+
+	CREATE TABLE #PageIndexSummary
+	(
+		[IndexID] int IDENTITY (1,1) NOT NULL,
+		DataID int NOT NULL,
+		SensorID int NOT NULL,
+		UserID varchar(10),
+		Temp float,
+		EventText varchar(5000),
+		ReadingOn datetime
+	)
+
+	INSERT INTO #PageIndex
+	(
+		id,
+		SenId,
+		UserId,
+		Field1Float,
+		EvtText,
+		ReadingAt
+	)
+
+	SELECT
+	D.id,
+	D.SenId,
+	S.UserId,
+	D.Field1Float,
+	D.EvtText,
+	D.ReadingAt
+	FROM Data D
+	LEFT OUTER JOIN Sensor S on S.id = D.SenId
+	WHERE
+	(@SensorId IS NULL OR @SensorId = -1 OR D.SenId = @SensorId)
+	AND (@EvtIds IS NULL OR ',' + @EvtIds + ',' like '%,' + convert(varchar(500), D.EvtId) + ',%')
+	AND (@ReadingStartDate IS NULL OR DATEDIFF(d, @ReadingStartDate, D.ReadingAt) >= 0)
+	AND (@ReadingEndDate IS NULL OR DATEDIFF(d, @ReadingEndDate, D.ReadingAt) <= 0)
+	AND D.id NOT IN (select DataID from _ENT_SensorData)
+	--ORDER BY
+	--LEFT(S.UserId,PATINDEX('%[0-9]%',S.UserId)-1),CONVERT(INT,SUBSTRING(S.UserId,PATINDEX('%[0-9]%',S.UserId),LEN(S.UserId)))
+	--CASE WHEN @SortField = -1 THEN S.UserId END ASC,
+	--CASE WHEN @SortField = 1 THEN S.UserId END DESC
+
+	INSERT INTO #PageIndexSummary
+	(
+		DataID,
+		SensorID,
+		UserID,
+		Temp,
+		EventText,
+		ReadingOn
+	)
+
+	SELECT
+	P.id,
+	P.SenId,
+	P.UserId,
+	P.Field1Float,
+	P.EvtText,--.[GetSensorEventBySensorId](P.SenId, @ReadingStartDate, @ReadingEndDate),
+	P.ReadingAt
+	FROM #PageIndex P
+	GROUP BY
+	P.UserId, P.SenId, P.Field1Float, P.ReadingAt,P.EvtText,P.id
+
+	SELECT @TotalRows = COUNT([IndexID]) FROM #PageIndexSummary
+
+	IF @ForExport = 0
+	BEGIN
+		SELECT
+		P.SensorID,
+		P.DataID,
+		P.UserID,
+		P.Temp,
+		P.EventText,
+		P.ReadingOn,
+		@TotalRows as TotalRows
+		FROM #PageIndexSummary P
+		LEFT JOIN _ENT_SensorInfo SI on SI.SensorID = P.SensorID
+		WHERE
+		(@PageSize IS NULL OR P.IndexID > @PageLowerBound)
+		AND (@PageSize IS NULL OR P.IndexID < @PageUpperBound)
+		ORDER BY
+		LEFT(SI.WifiMonitorName,PATINDEX('%[0-9]%',SI.WifiMonitorName)-1),CONVERT(INT,SUBSTRING(SI.WifiMonitorName,PATINDEX('%[0-9]%',SI.WifiMonitorName),LEN(SI.WifiMonitorName)))
+		,P.ReadingOn DESC
+	END
+	ELSE IF @ForExport = 1
+	BEGIN
+		SELECT
+		P.UserID,
+		P.Temp,
+		P.EventText,
+		P.ReadingOn
+		FROM #PageIndexSummary P
+		LEFT JOIN _ENT_SensorInfo SI on SI.SensorID = P.SensorID
+		ORDER BY
+		LEFT(SI.WifiMonitorName,PATINDEX('%[0-9]%',SI.WifiMonitorName)-1),CONVERT(INT,SUBSTRING(SI.WifiMonitorName,PATINDEX('%[0-9]%',SI.WifiMonitorName),LEN(SI.WifiMonitorName)))
+	END
+	 ELSE IF @ForExport = 2
+	BEGIN
+		SELECT
+		S.UserId as UserID,
+		D.Field1Float as Temp,
+		D.EvtText as EventTExt,
+		D.ReadingAt as ReadingOn
+
+		FROM #PageIndex P
+		LEFT OUTER JOIN Data D on D.id = P.id
+		LEFT OUTER JOIN Sensor S on S.id = D.SenId
+
+	END
+
+	DROP TABLE #PageIndex
+	DROP TABLE #PageIndexSummary
+
+
+
+
+
+
+USE [PsDb]
+GO
+/****** Object:  StoredProcedure [dbo].[SearchSensor]    Script Date: 12/27/2019 1:37:31 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+ALTER PROCEDURE [dbo].[SearchSensor]
+	@SensorId int,
+	@ReadingStartDate DateTime,
+	@ReadingEndDate DateTime,
+	@PageIndex int,
+	@PageSize int,
+	@SortField int,
+	@ForExport int
+AS
+	SET NOCOUNT ON;
+
+	DECLARE @TotalRows INT
+	DECLARE @PageLowerBound INT
+	DECLARE @PageUpperBound INT
+
+	IF @PageSize IS NOT NULL
+	BEGIN
+		SET @PageLowerBound = @PageSize * @PageIndex
+		SET @PageUpperBound = @PageLowerBound + @PageSize + 1
+	END
+
+	CREATE TABLE #PageIndex
+	(
+		[IndexID] int IDENTITY (1,1) NOT NULL,
+		id int,
+		SenId int,
+		UserId varchar(10),
+		Field1Float float,
+		EvtText varchar(40),
+		ReadingAt datetime
+	)
+
+	CREATE TABLE #PageIndexSummary
+	(
+		[IndexID] int IDENTITY (1,1) NOT NULL,
+		SenId int,
+		UserID varchar(10),
+		MinTemp float,
+		MaxTemp float,
+		AverageTemp float,
+		LastTemp float,
+		Median float,
+		StdDev float,
+		EventText varchar(5000)
+	)
+
+	INSERT INTO #PageIndex
+	(
+		id,
+		SenId,
+		UserId,
+		Field1Float,
+		EvtText,
+		ReadingAt
+	)
+
+	SELECT
+	D.id,
+	D.SenId,
+	S.UserId,
+	D.Field1Float,
+	D.EvtText,
+	D.ReadingAt
+	FROM Data D
+	LEFT OUTER JOIN Sensor S on S.id = D.SenId
+	WHERE
+	(@SensorId IS NULL OR @SensorId = -1 OR D.SenId = @SensorId)
+	AND (@ReadingStartDate IS NULL OR DATEDIFF(d, @ReadingStartDate, D.ReadingAt) >= 0)
+	AND (@ReadingEndDate IS NULL OR DATEDIFF(d, @ReadingEndDate, D.ReadingAt) <= 0)
+
+	--ORDER BY
+	--LEFT(S.UserId,PATINDEX('%[0-9]%',S.UserId)-1),CONVERT(INT,SUBSTRING(S.UserId,PATINDEX('%[0-9]%',S.UserId),LEN(S.UserId)))
+	--CASE WHEN @SortField = -1 THEN S.UserId END ASC,
+	--CASE WHEN @SortField = 1 THEN S.UserId END DESC
+
+	IF @ForExport = 0 OR @ForExport = 1
+	BEGIN
+	INSERT INTO #PageIndexSummary
+	(
+		SenId,
+		UserID,
+		MinTemp,
+		MaxTemp,
+		AverageTemp,
+		LastTemp,
+		Median,
+		StdDev,
+		EventText
+	)
+
+	SELECT
+	P.SenId,
+	P.UserId,
+	MIN(P.Field1Float),
+	MAX(P.Field1Float),
+	AVG(P.Field1Float),
+	[dbo].[GetSensorLastTempBySensorId](P.SenId, @ReadingStartDate, @ReadingEndDate),
+	[dbo].[GetSensorMedianTempBySensorId](P.SenId, @ReadingStartDate, @ReadingEndDate),
+	[dbo].[GetSensorStdDevTempBySensorId](P.SenId, @ReadingStartDate, @ReadingEndDate),
+	[dbo].[GetSensorEventBySensorId](P.SenId, @ReadingStartDate, @ReadingEndDate)
+	FROM #PageIndex P
+	GROUP BY
+	P.UserId, P.SenId
+
+	SELECT @TotalRows = COUNT([IndexID]) FROM #PageIndexSummary
+	END
+
+	IF @ForExport = 0
+	BEGIN
+		SELECT
+		SI.WifiMonitorName as UserID,
+		P.MinTemp,
+		P.MaxTemp,
+		P.AverageTemp,
+		P.LastTemp,
+		P.Median,
+		P.StdDev,
+		P.EventText,
+		@TotalRows as TotalRows
+		FROM #PageIndexSummary P
+		LEFT JOIN _ENT_SensorInfo SI on SI.SensorID = P.SenId
+		WHERE
+		(@PageSize IS NULL OR P.IndexID > @PageLowerBound)
+		AND (@PageSize IS NULL OR P.IndexID < @PageUpperBound)
+		ORDER BY
+		LEFT(SI.WifiMonitorName,PATINDEX('%[0-9]%',SI.WifiMonitorName)-1),CONVERT(INT,SUBSTRING(SI.WifiMonitorName,PATINDEX('%[0-9]%',SI.WifiMonitorName),LEN(SI.WifiMonitorName)))
+	END
+	ELSE IF @ForExport = 1
+	BEGIN
+		SELECT
+		SI.WifiMonitorName as UserID,
+		P.MinTemp,
+		P.MaxTemp,
+		P.AverageTemp,
+		P.LastTemp,
+		P.Median,
+		P.StdDev,
+		P.EventText
+		FROM #PageIndexSummary P
+		LEFT JOIN _ENT_SensorInfo SI on SI.SensorID = P.SenId
+		ORDER BY
+		LEFT(SI.WifiMonitorName,PATINDEX('%[0-9]%',SI.WifiMonitorName)-1),CONVERT(INT,SUBSTRING(SI.WifiMonitorName,PATINDEX('%[0-9]%',SI.WifiMonitorName),LEN(SI.WifiMonitorName)))
+	END
+	 ELSE IF @ForExport = 2
+	BEGIN
+		SELECT
+		SI.WifiMonitorName as UserID,
+		D.Field1Float as Temp,
+		D.EvtText as EventTExt,
+		D.ReadingAt as ReadingOn
+
+		FROM #PageIndex P
+		LEFT JOIN _ENT_SensorInfo SI on SI.SensorID = P.SenId
+		LEFT OUTER JOIN Data D on D.id = P.id
+		LEFT OUTER JOIN Sensor S on S.id = D.SenId
+
+	END
+
+	DROP TABLE #PageIndex
+	DROP TABLE #PageIndexSummary
+
+
+
+
+
+
+/****** Object:  StoredProcedure [dbo].[SearchSensorByEventId]    Script Date: 9/30/2019 12:06:45 PM ******/
+SET ANSI_NULLS ON
+
+

@@ -1,0 +1,26 @@
+
+SET IDENTITY_INSERT [dbo].[_ENT_AppSetting] ON
+
+GO
+INSERT [dbo].[_ENT_AppSetting] ([ID], [Name], [Value]) VALUES (1, N'SensorReportTask', N'10/07/2019')
+GO
+INSERT [dbo].[_ENT_AppSetting] ([ID], [Name], [Value]) VALUES (2, N'ReportFilePath', N'C:\PointSensorDashboard\')
+GO
+INSERT [dbo].[_ENT_AppSetting] ([ID], [Name], [Value]) VALUES (3, N'EmailSensorEventList', N'test@test.com;test@test.com')
+GO
+SET IDENTITY_INSERT [dbo].[_ENT_AppSetting] OFF
+GO
+
+
+
+SET IDENTITY_INSERT [dbo].[_Ent_Status] ON
+
+GO
+INSERT [dbo].[_Ent_Status] ([ID], [Name], [Description]) VALUES (1, N'Active', NULL)
+GO
+INSERT [dbo].[_Ent_Status] ([ID], [Name], [Description]) VALUES (2, N'Completed', NULL)
+GO
+INSERT [dbo].[_Ent_Status] ([ID], [Name], [Description]) VALUES (3, N'Cancelled', NULL)
+GO
+SET IDENTITY_INSERT [dbo].[_Ent_Status] OFF
+GO

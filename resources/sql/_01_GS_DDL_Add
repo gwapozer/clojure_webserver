@@ -1,0 +1,86 @@
+/****** Object:  Table [dbo].[_ENT_AppEvent]    Script Date: 12/10/2019 9:24:50 AM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE TABLE [dbo].[_ENT_AppEvent](
+	[ID] [int] IDENTITY(1,1) NOT NULL,
+	[Name] [varchar](50) NOT NULL,
+ CONSTRAINT [PK__ENT_AppEvent] PRIMARY KEY CLUSTERED
+(
+	[ID] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+
+
+
+
+
+
+
+/****** Object:  Table [dbo].[_ENT_EventHistory]    Script Date: 12/10/2019 9:25:19 AM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE TABLE [dbo].[_ENT_EventHistory](
+	[ID] [int] IDENTITY(1,1) NOT NULL,
+	[AppEventID] [int] NOT NULL,
+	[TblName] [varchar](50) NULL,
+	[InitData] [text] NULL,
+	[UpdateData] [text] NULL,
+	[CreatedOn] [datetime] NULL,
+ CONSTRAINT [PK__ENT_EventHistory] PRIMARY KEY CLUSTERED
+(
+	[ID] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+
+GO
+
+ALTER TABLE [dbo].[_ENT_EventHistory]  WITH CHECK ADD  CONSTRAINT [FK__ENT_EventHistory__ENT_AppEvent] FOREIGN KEY([AppEventID])
+REFERENCES [dbo].[_ENT_AppEvent] ([ID])
+GO
+
+ALTER TABLE [dbo].[_ENT_EventHistory] CHECK CONSTRAINT [FK__ENT_EventHistory__ENT_AppEvent]
+GO
+
+
+
+
+
+/****** Object:  Table [dbo].[_ENT_SensorInfo]    Script Date: 12/10/2019 9:25:34 AM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE TABLE [dbo].[_ENT_SensorInfo](
+	[ID] [int] IDENTITY(1,1) NOT NULL,
+	[SensorID] [int] NOT NULL,
+	[WifiMonitorName] [varchar](50) NOT NULL,
+ CONSTRAINT [PK__ENT_SensorInfo] PRIMARY KEY CLUSTERED
+(
+	[ID] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+
+ALTER TABLE [dbo].[_ENT_SensorInfo]  WITH CHECK ADD  CONSTRAINT [FK__ENT_SensorInfo_Sensor] FOREIGN KEY([SensorID])
+REFERENCES [dbo].[Sensor] ([id])
+GO
+
+ALTER TABLE [dbo].[_ENT_SensorInfo] CHECK CONSTRAINT [FK__ENT_SensorInfo_Sensor]
+GO
+
+
+
+
