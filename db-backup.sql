@@ -1,0 +1,3 @@
+BACKUP DATABASE PsDb TO  DISK = N'C:\db-backups\MyDataBase1.bak' 
+WITH NOFORMAT, INIT,  NAME = N'PsDb Backup', SKIP, NOREWIND, NOUNLOAD,  STATS = 10
+GO

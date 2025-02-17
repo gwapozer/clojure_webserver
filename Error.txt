@@ -1,0 +1,3 @@
+2020-04-02T15:48:19.281: java.lang.ArithmeticException: Divide by zero
+2020-04-02T15:49:19.285: java.lang.ArithmeticException: Divide by zero
+2020-04-02T15:50:19.281: java.lang.ArithmeticException: Divide by zero
