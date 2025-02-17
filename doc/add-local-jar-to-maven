@@ -1,0 +1,1 @@
+mvn install:install-file -Dfile=C:\Users\ENT_ASUS_LAPTOP\IdeaProjects\pointsensor_dashboard\resources\drivers\mssql-jdbc-7.0.0.jre8.jar -DgroupId=mssql-jdbc -DartifactId=mssql-jdbc -Dversion=7.0.0 -Dpackaging=jar
