@@ -1,0 +1,11 @@
+declare @startDate as datetime
+declare @EndDate as datetime
+
+set @startDate = '4/14/25';
+set @EndDate = '4/26/25';
+
+select @startDate
+
+SELECT DATEADD(dd,1-DATEPART(dw,@startDate),@startDate);
+SELECT DATEADD(dd,1-DATEPART(dw,@EndDate),@EndDate);
+SELECT DATEADD(dd,1-DATEPART(dw,GETDATE()),GETDATE());
