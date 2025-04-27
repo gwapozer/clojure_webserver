@@ -4,6 +4,8 @@ declare @EndDate as datetime
 set @startDate = '4/14/25';
 set @EndDate = '4/26/25';
 
+--set DATEFIRST 1  --Monday
+
 select @startDate
 
 SELECT DATEADD(dd,1-DATEPART(dw,@startDate),@startDate);
