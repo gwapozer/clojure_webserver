@@ -1,0 +1,7 @@
+select top 1 Nome from
+
+(SELECT Nome, 1 as SortOrder FROM tbCliente WHERE id = 2
+union select null, 2
+) myTable
+
+order by SortOrder
